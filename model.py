@@ -60,11 +60,12 @@ class GNN(torch.nn.Module):
         # Linear layers
         self.linear1 = Linear(embedding_size*2, dense_neurons)
         self.linear2 = Linear(dense_neurons, int(dense_neurons/2))  
-        self.linear3 = Linear(int(dense_neurons/2), 1)  
+        self.linear3 = Linear(int(dense_neurons/2), 10)  
 
-    def forward(self, x, edge_attr, edge_index, batch_index):
+    def forward(self, x, edge_index, batch_index):
         # Initial transformation
-        x = self.conv1(x, edge_index, edge_attr)
+        # edge_index=torch.tensor(edge_index[0], dtype=torch.long) #ATTENTION! QUICK, DIRTY (and probably wrong) FIX
+        x = self.conv1(x, edge_index)
         x = torch.relu(self.transf1(x))
         x = self.bn1(x)
 
@@ -72,14 +73,12 @@ class GNN(torch.nn.Module):
         global_representation = []
 
         for i in range(self.n_layers):
-            x = self.conv_layers[i](x, edge_index, edge_attr)
+            x = self.conv_layers[i](x, edge_index)
             x = torch.relu(self.transf_layers[i](x))
             x = self.bn_layers[i](x)
             # Always aggregate last layer
             if i % self.top_k_every_n == 0 or i == self.n_layers:
-                x , edge_index, edge_attr, batch_index, _, _ = self.pooling_layers[int(i/self.top_k_every_n)](
-                    x, edge_index, edge_attr, batch_index
-                    )
+                x, edge_index, _, batch_index, _, _ = self.pooling_layers[int(i/self.top_k_every_n)](x, edge_index, batch=batch_index)
                 # Add current representation
                 global_representation.append(torch.cat([gmp(x, batch_index), gap(x, batch_index)], dim=1))
     

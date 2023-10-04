@@ -109,13 +109,19 @@ class groupsDataset(Dataset):
         adjacency_matrix = np.ones((len(group), len(group)))
         # turn the adjacency matrix into a list of edges
         edge_index = np.array(np.where(adjacency_matrix == 1))
+        edge_index = torch.tensor(edge_index, dtype=torch.long)
         return edge_index
 
     def _get_label(self, group):
         '''
         This function returns the label for a group of TPs. 
         '''
-        return group[0, 7]
+        # return the type of the group in one-hot encoding
+        label = np.zeros(10)
+        label[group[0, 7]] = 1
+        label = torch.tensor(label, dtype=torch.uint8)
+        return label
+
 
 
     def len(self):

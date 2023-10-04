@@ -5,7 +5,7 @@ from sklearn.metrics import confusion_matrix, f1_score, \
     accuracy_score, precision_score, recall_score, roc_auc_score
 import numpy as np
 from tqdm import tqdm
-from dataset_featurizer import MoleculeDataset
+from dataset import groupsDataset
 from model import GNN
 import matplotlib.pyplot as plt 
 import seaborn as sns
@@ -28,12 +28,12 @@ def train_one_epoch(epoch, model, train_loader, optimizer, loss_fn):
         # Reset gradients
         optimizer.zero_grad() 
         # Passing the node features and the connection info
-        pred = model(batch.x.float(), 
-                                batch.edge_attr.float(),
-                                batch.edge_index, 
-                                batch.batch) 
+        pred = model(batch.x.float(), batch.edge_index, batch.batch) 
         # Calculating the loss and gradients
-        loss = loss_fn(torch.squeeze(pred), batch.y.float())
+
+        batch.y = torch.reshape(batch.y, pred.shape)
+
+        loss = loss_fn(pred, batch.y.float())
         loss.backward()  
         optimizer.step()  
         # Update tracking
@@ -55,10 +55,9 @@ def test(epoch, model, test_loader, loss_fn):
     for batch in test_loader:
         batch.to(device)  
         pred = model(batch.x.float(), 
-                        batch.edge_attr.float(),
                         batch.edge_index, 
                         batch.batch) 
-        loss = loss_fn(torch.squeeze(pred), batch.y.float())
+        loss = loss_fn(pred, torch.reshape(batch.y, pred.shape).float())
 
          # Update tracking
         running_loss += loss.item()
@@ -78,95 +77,29 @@ def test(epoch, model, test_loader, loss_fn):
 
 def log_conf_matrix(y_pred, y_true, epoch):
     # Log confusion matrix as image
-    cm = confusion_matrix(y_pred, y_true)
-    classes = ["0", "1"]
-    df_cfm = pd.DataFrame(cm, index = classes, columns = classes)
-    plt.figure(figsize = (10,7))
-    cfm_plot = sns.heatmap(df_cfm, annot=True, cmap='Blues', fmt='g')
-    cfm_plot.figure.savefig(f'data/images/cm_{epoch}.png')
-    mlflow.log_artifact(f"data/images/cm_{epoch}.png")
+    print("implement a function to log the confusion matrix")
+    # cm = confusion_matrix(y_pred, y_true)
+    # classes = ["0", "1"]
+    # df_cfm = pd.DataFrame(cm, index = classes, columns = classes)
+    # plt.figure(figsize = (10,7))
+    # cfm_plot = sns.heatmap(df_cfm, annot=True, cmap='Blues', fmt='g')
+    # cfm_plot.figure.savefig(f'data/images/cm_{epoch}.png')
+    # mlflow.log_artifact(f"data/images/cm_{epoch}.png")
 
 def calculate_metrics(y_pred, y_true, epoch, type):
-    print(f"\n Confusion matrix: \n {confusion_matrix(y_pred, y_true)}")
-    print(f"F1 Score: {f1_score(y_true, y_pred)}")
-    print(f"Accuracy: {accuracy_score(y_true, y_pred)}")
-    prec = precision_score(y_true, y_pred)
-    rec = recall_score(y_true, y_pred)
-    print(f"Precision: {prec}")
-    print(f"Recall: {rec}")
-    mlflow.log_metric(key=f"Precision-{type}", value=float(prec), step=epoch)
-    mlflow.log_metric(key=f"Recall-{type}", value=float(rec), step=epoch)
-    try:
-        roc = roc_auc_score(y_true, y_pred)
-        print(f"ROC AUC: {roc}")
-        mlflow.log_metric(key=f"ROC-AUC-{type}", value=float(roc), step=epoch)
-    except:
-        mlflow.log_metric(key=f"ROC-AUC-{type}", value=float(0), step=epoch)
-        print(f"ROC AUC: notdefined")
+    print("implement a function to calculate metrics")
+#     print(f"\n Confusion matrix: \n {confusion_matrix(y_pred, y_true)}")
+#     print(f"F1 Score: {f1_score(y_true, y_pred)}")
+#     print(f"Accuracy: {accuracy_score(y_true, y_pred)}")
+#     prec = precision_score(y_true, y_pred)
+#     rec = recall_score(y_true, y_pred)
+#     print(f"Precision: {prec}")
+#     print(f"Recall: {rec}")
+#     try:
+#         roc = roc_auc_score(y_true, y_pred)
+#         print(f"ROC AUC: {roc}")
+#     except:
+#         print(f"ROC AUC: notdefined")
 
 
-
-def run_one_training(params):
-    params = params[0]
-
-    # Loading the dataset
-    print("Loading dataset...")
-    train_dataset = MoleculeDataset(root="data/", filename="HIV_train_oversampled.csv")
-    test_dataset = MoleculeDataset(root="data/", filename="HIV_test.csv", test=True)
-    params["model_edge_dim"] = train_dataset[0].edge_attr.shape[1]
-
-    # Prepare training
-    train_loader = DataLoader(train_dataset, batch_size=params["batch_size"], shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=params["batch_size"], shuffle=True)
-
-    # Loading the model
-    print("Loading model...")
-    model_params = {k: v for k, v in params.items() if k.startswith("model_")}
-    model = GNN(feature_size=train_dataset[0].x.shape[1], model_params=model_params) 
-    model = model.to(device)
-    print(f"Number of parameters: {count_parameters(model)}")
-    mlflow.log_param("num_params", count_parameters(model))
-
-    # < 1 increases precision, > 1 recall
-    weight = torch.tensor([params["pos_weight"]], dtype=torch.float32).to(device)
-    loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=weight)
-    optimizer = torch.optim.SGD(model.parameters(), 
-                                lr=params["learning_rate"],
-                                momentum=params["sgd_momentum"],
-                                weight_decay=params["weight_decay"])
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=params["scheduler_gamma"])
-
-    # Start training
-    best_loss = 1000
-    early_stopping_counter = 0
-    for epoch in range(300): 
-        if early_stopping_counter <= 10: # = x * 5 
-            # Training
-            model.train()
-            loss = train_one_epoch(epoch, model, train_loader, optimizer, loss_fn)
-            print(f"Epoch {epoch} | Train Loss {loss}")
-            mlflow.log_metric(key="Train loss", value=float(loss), step=epoch)
-
-            # Testing
-            model.eval()
-            if epoch % 5 == 0:
-                loss = test(epoch, model, test_loader, loss_fn)
-                print(f"Epoch {epoch} | Test Loss {loss}")
-                mlflow.log_metric(key="Test loss", value=float(loss), step=epoch)
-                
-                # Update best loss
-                if float(loss) < best_loss:
-                    best_loss = loss
-                    # Save the currently best model 
-                    mlflow.pytorch.log_model(model, "model", signature=SIGNATURE)
-                    early_stopping_counter = 0
-                else:
-                    early_stopping_counter += 1
-
-            scheduler.step()
-        else:
-            print("Early stopping due to no improvement.")
-            return [best_loss]
-    print(f"Finishing training with best test loss: {best_loss}")
-    return [best_loss]
 
