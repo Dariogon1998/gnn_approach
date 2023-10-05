@@ -89,7 +89,7 @@ class GNN(torch.nn.Module):
         x = F.dropout(x, p=0.8, training=self.training)
         x = torch.relu(self.linear2(x))
         x = F.dropout(x, p=0.8, training=self.training)
-        x = self.linear3(x)
+        x = self.linear3(x) # in pytorch CrossEntropyLoss() includes softmax
 
         return x
 
