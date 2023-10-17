@@ -18,7 +18,7 @@ np.random.seed(42)
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-def train_one_epoch(epoch, model, train_loader, optimizer, loss_fn):
+def train_one_epoch(epoch, model, train_loader, optimizer, loss_fn, output_folder="log/"):
     # Enumerate over the data
     all_preds = []
     all_labels = []
@@ -49,12 +49,12 @@ def train_one_epoch(epoch, model, train_loader, optimizer, loss_fn):
         all_labels.append((batch.y.cpu().detach().numpy()))
 
 
-    log_metrics(np.concatenate(all_labels), np.concatenate(all_preds), epoch=epoch, test=False)
+    log_metrics(np.concatenate(all_labels), np.concatenate(all_preds), epoch=epoch, test=False, output_folder=output_folder)
 
     return running_loss/step, running_accuracy/step
 
 
-def test(epoch, model, test_loader, loss_fn):
+def test(epoch, model, test_loader, loss_fn, output_folder="log/"):
     all_preds = []
     all_preds_raw = []
     all_labels = []
@@ -79,7 +79,7 @@ def test(epoch, model, test_loader, loss_fn):
 
         running_accuracy += accuracy_score(np.argmax(batch.y.cpu().detach().numpy(), axis=1), np.argmax((pred).cpu().detach().numpy(), axis=1))
 
-    log_metrics(np.concatenate(all_labels), np.concatenate(all_preds), epoch=epoch, test=True)
+    log_metrics(np.concatenate(all_labels), np.concatenate(all_preds), epoch=epoch, test=True, output_folder=output_folder)
 
     return running_loss/step, running_accuracy/step
 
@@ -95,8 +95,16 @@ def calculate_metrics( y_true, y_pred, labels=[0,1,2,3,4,5,6,7,8,9]):
 
     return cm, accuracy, precision, recall, f1
     
-def log_metrics(y_true, y_pred, labels=[0,1,2,3,4,5,6,7,8,9], epoch=0, test=False):
+def log_metrics(y_true, y_pred, labels=[0,1,2,3,4,5,6,7,8,9], epoch=0, test=False, output_folder="log/"):
     cm, accuracy, precision, recall, f1 = calculate_metrics(y_true, y_pred, labels)
+    # Save metrics to file
+    if test:
+        with open(output_folder + f"log/test/metrics_test_{epoch}.txt", "a") as f:
+            f.write(f"{epoch} {accuracy} {precision} {recall} {f1}\n")
+    else:
+        with open(output_folder + f"log/train/metrics_train_{epoch}.txt", "a") as f:
+            f.write(f"{epoch} {accuracy} {precision} {recall} {f1}\n")
+    # Print metrics
     print("Confusion Matrix")
     print(cm)
     print("Accuracy: ", accuracy)
@@ -110,8 +118,8 @@ def log_metrics(y_true, y_pred, labels=[0,1,2,3,4,5,6,7,8,9], epoch=0, test=Fals
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     if test:
-        plt.savefig(f"log/test/confusion_matrix_test_{epoch}.png")
+        plt.savefig(output_folder + f"log/test/confusion_matrix_test_{epoch}.png")
     else:
-        plt.savefig(f"log/train/confusion_matrix_train_{epoch}.png")
+        plt.savefig(output_folder + f"log/train/confusion_matrix_train_{epoch}.png")
     plt.clf()
 

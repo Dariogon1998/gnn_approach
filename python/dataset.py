@@ -179,6 +179,19 @@ class groupsDataset(Dataset):
         return data
 
 
+def get_unique_from_loader(loader, return_counts=False):
+    '''
+    This function returns the unique labels in the dataset.
+    '''
+    lab_list = []
+    for batch in loader:
+        lab_list.append(np.argmax(batch.y.cpu().detach().numpy()))
+    
+    lab_list = np.array(lab_list)
+    return np.unique(lab_list, return_counts=return_counts)
+
+
+
 
 
 
