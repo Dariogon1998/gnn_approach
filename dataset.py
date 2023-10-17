@@ -28,11 +28,15 @@ from torch_geometric.data import Dataset, Data
 
 sys.path.append('/afs/cern.ch/work/d/dapullia/public/dune/online-pointing-utils/python/tps_text_to_image')
 import create_images_from_tps_libs as tp2img
+# set the random seed
+torch.manual_seed(42)
+np.random.seed(42)
+
 
 
 class groupsDataset(Dataset):
 
-    def __init__(self, root, filename, n_tps_to_read=1000, test=False, transform=None, pre_transform=None):
+    def __init__(self, root, filename, n_tps_to_read=1000, test=False, transform=None, pre_transform=None, balance_classes=False):
         """
         root = Where the dataset should be stored. This folder is split
         into raw_dir (downloaded dataset) and processed_dir (processed data). 
@@ -40,6 +44,7 @@ class groupsDataset(Dataset):
         self.test = test
         self.filename = filename
         self.n_tps_to_read = n_tps_to_read
+        self.balance_classes = balance_classes
         super(groupsDataset, self).__init__(root, transform, pre_transform)
         
     @property
@@ -53,14 +58,15 @@ class groupsDataset(Dataset):
     def processed_file_names(self):
         """ If these files are found in raw_dir, processing is skipped"""
         data = np.loadtxt(self.raw_paths[0], max_rows=self.n_tps_to_read, dtype=int)
-        data[:, 3] = data[:, 3]%2560
         channel_map = tp2img.create_channel_map_array('/afs/cern.ch/work/d/dapullia/public/dune/online-pointing-utils/channel-maps/channel_map_upright.txt')
-        # groups = tp2img.cluster_maker_only_by_time(data, channel_map, ticks_limit=200, channel_limit=20, min_tps_to_cluster=3)
-        groups = tp2img.cluster_maker(data, channel_map, ticks_limit=200, channel_limit=20, min_tps_to_cluster=2)
+        # groups = tp2img.group_maker_only_by_time(data, channel_map, ticks_limit=200, channel_limit=20, min_tps_to_group=3)
+        groups = tp2img.group_maker(data, channel_map, ticks_limit=200, channel_limit=20, min_tps_to_group=2)
 
         # remove the groups with different types
         groups = [group for group in groups if len(set(group[:, 7])) == 1]
-
+        if self.balance_classes:
+            # balance the classes
+            groups = self._balance_classes(groups)
         self.groups = groups
 
         if self.test:
@@ -73,13 +79,16 @@ class groupsDataset(Dataset):
 
     def process(self):
         data = np.loadtxt(self.raw_paths[0], max_rows=self.n_tps_to_read, dtype=int)
-        data[:, 3] = data[:, 3]%2560
         channel_map = tp2img.create_channel_map_array('/afs/cern.ch/work/d/dapullia/public/dune/online-pointing-utils/channel-maps/channel_map_upright.txt')
-        # groups = tp2img.cluster_maker_only_by_time(data, channel_map, ticks_limit=200, channel_limit=20, min_tps_to_cluster=3)
-        groups = tp2img.cluster_maker(data, channel_map, ticks_limit=200, channel_limit=20, min_tps_to_cluster=2)
+        # groups = tp2img.group_maker_only_by_time(data, channel_map, ticks_limit=200, channel_limit=20, min_tps_to_group=3)
+        groups = tp2img.group_maker(data, channel_map, ticks_limit=200, channel_limit=20, min_tps_to_group=2)
 
         # remove the groups with different types
         groups = [group for group in groups if len(set(group[:, 7])) == 1]
+        if self.balance_classes:
+            # balance the classes
+            groups = self._balance_classes(groups)
+
         self.groups = groups
 
         # create the graphs
@@ -108,10 +117,26 @@ class groupsDataset(Dataset):
         At first, we connect all the nodes to all the other nodes.
         Shape: [2, n_edges]
         '''
-        adjacency_matrix = np.ones((len(group), len(group)))
+        # create the adjacency matrix
+        # [[1,1,0,0,0],]
+        # [[1,1,1,0,0],]
+        # [[0,1,1,1,0],]
+        # [[0,0,1,1,1],]
+        # [[0,0,0,1,1],]
+        adjacency_matrix = np.zeros((len(group), len(group)))
+        adjacency_matrix[0, 0] = 1
+        adjacency_matrix[0, 1] = 1
+        for i in range(1,len(group)-1):
+            adjacency_matrix[i, i] = 1
+            adjacency_matrix[i, i-1] = 1
+            adjacency_matrix[i, i+1] = 1
+        adjacency_matrix[-1, -1] = 1
+        adjacency_matrix[-1, -2] = 1
+        
         # turn the adjacency matrix into a list of edges
         edge_index = np.array(np.where(adjacency_matrix == 1))
         edge_index = torch.tensor(edge_index, dtype=torch.long)
+
         return edge_index
 
     def _get_label(self, group):
@@ -124,7 +149,19 @@ class groupsDataset(Dataset):
         label = torch.tensor(label, dtype=torch.uint8)
         return label
 
-
+    def _balance_classes(self, groups):
+        '''
+        This function balances the classes in the dataset (not definitive)
+        '''
+        # randomly remove 80% of the groups of type 1
+        n_groups =  []
+        for group in groups:
+            if group[0, 7] == 1:
+                if np.random.rand() < 0.15:
+                    n_groups.append(group)
+            else:
+                n_groups.append(group)
+        return n_groups
 
     def len(self):
         return len(self.groups)

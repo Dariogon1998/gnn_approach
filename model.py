@@ -12,7 +12,7 @@ Description:
 import torch
 import torch.nn.functional as F 
 from torch.nn import Linear, BatchNorm1d, ModuleList
-from torch_geometric.nn import TransformerConv, TopKPooling 
+from torch_geometric.nn import TransformerConv, TopKPooling, GCNConv
 from torch_geometric.nn import global_mean_pool as gap, global_max_pool as gmp
 torch.manual_seed(42)
 
@@ -27,12 +27,15 @@ class GNN(torch.nn.Module):
         top_k_ratio = model_params["model_top_k_ratio"]
         self.top_k_every_n = model_params["model_top_k_every_n"]
         dense_neurons = model_params["model_dense_neurons"]
+        first_layer_neurons = model_params["model_first_layer_neurons"]
 
+
+        # self.first_layer = Linear(feature_size, first_layer_neurons)
         self.conv_layers = ModuleList([])
         self.transf_layers = ModuleList([])
         self.pooling_layers = ModuleList([])
         self.bn_layers = ModuleList([])
-
+    
         # Transformation layer
         self.conv1 = TransformerConv(feature_size, 
                                     embedding_size, 
@@ -64,7 +67,7 @@ class GNN(torch.nn.Module):
 
     def forward(self, x, edge_index, batch_index):
         # Initial transformation
-        # edge_index=torch.tensor(edge_index[0], dtype=torch.long) #ATTENTION! QUICK, DIRTY (and probably wrong) FIX
+        # x = torch.relu(self.first_layer(x))
         x = self.conv1(x, edge_index)
         x = torch.relu(self.transf1(x))
         x = self.bn1(x)

@@ -39,7 +39,7 @@ np.random.seed(42)
 
 
 
-N_TPS_TO_READ = 1000000
+N_TPS_TO_READ = 5000000
 N_EPOCHS_TO_TRAIN = 400
 N_EPOCHS_TO_TEST = 5
 
@@ -65,7 +65,7 @@ filename = '/eos/user/d/dapullia/tp_dataset/snana_hits.txt'
 
 # Create the dataset
 
-dataset = myds.groupsDataset(root='/afs/cern.ch/work/d/dapullia/public/dune/gnn_approach/data/', filename=filename, test=False, n_tps_to_read=N_TPS_TO_READ)
+dataset = myds.groupsDataset(root='/afs/cern.ch/work/d/dapullia/public/dune/gnn_approach/data/', filename=filename, test=False, n_tps_to_read=N_TPS_TO_READ, balance_classes=True)
 
 # shuffle the dataset
 dataset = dataset.shuffle()
@@ -84,13 +84,14 @@ print(get_unique_from_loader(test_dataset, return_counts=True))
 # Create the model
 
 model_params = {
-    "model_embedding_size": 64,
-    "model_attention_heads": 3,
-    "model_layers": 4,
+    "model_embedding_size": 16,
+    "model_attention_heads": 2,
+    "model_layers": 1,
     "model_dropout_rate": 0.2,
     "model_top_k_ratio": 0.5,
-    "model_top_k_every_n": 1,
-    "model_dense_neurons": 256,
+    "model_top_k_every_n": 100,
+    "model_dense_neurons": 128,
+    "model_first_layer_neurons": 32,
 }
 
 print("Creating the model")
@@ -123,7 +124,7 @@ train_losses = []
 train_accuracies = []
 test_losses = []
 test_accuracies = []
-
+best_epochs_list = []
 for epoch in range(N_EPOCHS_TO_TRAIN): 
     if early_stopping_counter <= 10: # = x * 5 
         # Training
@@ -139,20 +140,24 @@ for epoch in range(N_EPOCHS_TO_TRAIN):
             test_losses.append(loss)
             test_accuracies.append(accuracy)
 
-            print("|----------------------------------------------------------------|")
+            print("|-------------------------------------------------------------------------|")
             print(f"Epoch {epoch} | Test Loss {loss} | Test Accuracy {accuracy}")
-            print("|----------------------------------------------------------------|")            
+            print("|-------------------------------------------------------------------------|")            
             # Update best loss
             if float(loss) < best_loss:
                 best_loss = loss
                 # Save the currently best model 
                 torch.save(model.state_dict(), 'checkpoints/best_model.pt')
                 early_stopping_counter = 0
+                best_epoch = [epoch, loss, accuracy]
+                print("New best model! Epoch: ", best_epoch)
+                best_epochs_list.append(best_epoch)
             else:
                 early_stopping_counter += 1
         scheduler.step()
     else:
         print("Early stopping")
+        print(f"Best epochs: {best_epochs_list}")
         break
 
 
@@ -192,7 +197,7 @@ all_labels = np.concatenate(all_labels)
 
 
 
-cm, accuracy, precision, recall, f1 = mytrain.calculate_metrics(all_preds, all_labels)
+cm, accuracy, precision, recall, f1 = mytrain.calculate_metrics(all_labels, all_preds)
 
 print(f"Accuracy: {accuracy}")
 print(f"Precision: {precision}")
@@ -207,4 +212,42 @@ sns.heatmap(cm, annot=True, cmap="YlGnBu", xticklabels=labels, yticklabels=label
 plt.ylabel('True label')
 plt.xlabel('Predicted label')
 plt.savefig('confusion_matrix.png')
+plt.clf()
+
+
+# Calculate metrics on the train set
+all_preds = []
+all_labels = []
+
+for batch in train_loader:
+    batch.to(device)  
+    pred = model(batch.x.float(), 
+                    batch.edge_index, 
+                    batch.batch) 
+
+    batch.y=torch.reshape(batch.y, pred.shape)
+
+    all_preds.append((F.softmax(pred).cpu().detach().numpy() ))
+    all_labels.append((batch.y.cpu().detach().numpy()))
+
+all_preds = np.concatenate(all_preds)
+all_labels = np.concatenate(all_labels)
+
+
+
+cm, accuracy, precision, recall, f1 = mytrain.calculate_metrics(all_labels, all_preds)
+
+print(f"Accuracy: {accuracy}")
+print(f"Precision: {precision}")
+print(f"Recall: {recall}")
+print(f"F1: {f1}")
+print(f"Confusion matrix: \n{cm}")
+# Plot the confusion matrix
+labels = [0,1,2,3,4,5,6,7,8,9]
+plt.figure(figsize=(10,10))
+plt.title("Confusion matrix")
+sns.heatmap(cm, annot=True, cmap="YlGnBu", xticklabels=labels, yticklabels=labels)
+plt.ylabel('True label')
+plt.xlabel('Predicted label')
+plt.savefig('confusion_matrix_train.png')
 plt.clf()

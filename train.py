@@ -42,9 +42,14 @@ def train_one_epoch(epoch, model, train_loader, optimizer, loss_fn):
         # Update tracking
         running_loss += loss.item()
         step += 1
-        all_preds.append(np.argmax(F.softmax(pred, dim=1).cpu().detach().numpy(), axis=1))
-        all_labels.append(np.argmax(batch.y.cpu().detach().numpy(), axis=1))
-        running_accuracy += accuracy_score(np.argmax(batch.y.cpu().detach().numpy(), axis=1), np.argmax(F.softmax(pred, dim=1).cpu().detach().numpy(), axis=1))
+        # all_preds.append((F.softmax(pred).cpu().detach().numpy() ))
+    
+        running_accuracy += accuracy_score(np.argmax(batch.y.cpu().detach().numpy(), axis=1), np.argmax((pred).cpu().detach().numpy(), axis=1))
+        all_preds.append(F.softmax(pred, dim=1).cpu().detach().numpy())
+        all_labels.append((batch.y.cpu().detach().numpy()))
+
+
+    log_metrics(np.concatenate(all_labels), np.concatenate(all_preds), epoch=epoch, test=False)
 
     return running_loss/step, running_accuracy/step
 
@@ -68,15 +73,17 @@ def test(epoch, model, test_loader, loss_fn):
          # Update tracking
         running_loss += loss.item()
         step += 1
+        # all_preds.append((F.softmax(pred).cpu().detach().numpy() ))
+        all_preds.append(F.softmax(pred, dim=1).cpu().detach().numpy())
+        all_labels.append((batch.y.cpu().detach().numpy()))
 
-        all_preds.append(np.argmax(F.softmax(pred, dim=1).cpu().detach().numpy(), axis=1))
-        all_preds_raw.append(F.softmax(pred, dim=1).cpu().detach().numpy())
-        all_labels.append(np.argmax(batch.y.cpu().detach().numpy(), axis=1))
         running_accuracy += accuracy_score(np.argmax(batch.y.cpu().detach().numpy(), axis=1), np.argmax((pred).cpu().detach().numpy(), axis=1))
+
+    log_metrics(np.concatenate(all_labels), np.concatenate(all_preds), epoch=epoch, test=True)
 
     return running_loss/step, running_accuracy/step
 
-def calculate_metrics(y_pred, y_true, labels=[0,1,2,3,4,5,6,7,8,9]):
+def calculate_metrics( y_true, y_pred, labels=[0,1,2,3,4,5,6,7,8,9]):
     # calculate the confusion matrix, the accuracy, and the precision and recall 
     y_pred_am = np.argmax(y_pred, axis=1)
     y_true_am = np.argmax(y_true, axis=1)
@@ -87,4 +94,24 @@ def calculate_metrics(y_pred, y_true, labels=[0,1,2,3,4,5,6,7,8,9]):
     f1 = f1_score(y_true_am, y_pred_am, average='macro')
 
     return cm, accuracy, precision, recall, f1
+    
+def log_metrics(y_true, y_pred, labels=[0,1,2,3,4,5,6,7,8,9], epoch=0, test=False):
+    cm, accuracy, precision, recall, f1 = calculate_metrics(y_true, y_pred, labels)
+    print("Confusion Matrix")
+    print(cm)
+    print("Accuracy: ", accuracy)
+    print("Precision: ", precision)
+    print("Recall: ", recall)
+    print("F1: ", f1)
+    # save confusion matrix 
+    plt.figure(figsize=(10,10))
+    plt.title("Confusion matrix")
+    sns.heatmap(cm, annot=True, cmap="YlGnBu", xticklabels=labels, yticklabels=labels)
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+    if test:
+        plt.savefig(f"log/test/confusion_matrix_test_{epoch}.png")
+    else:
+        plt.savefig(f"log/train/confusion_matrix_train_{epoch}.png")
+    plt.clf()
 
