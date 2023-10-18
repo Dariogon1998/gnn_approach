@@ -2,5 +2,6 @@ data/*
 checkpoints/*
 log/*
 __pycache__
-test.py
+python/test.py
+python/first-tbd.py
 *.png

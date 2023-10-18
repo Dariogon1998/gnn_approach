@@ -48,6 +48,7 @@ parser.add_argument("--n_epochs_to_train", help="number of epochs to train", def
 parser.add_argument("--n_epochs_to_test", help="number of epochs to test", default=5, type=int)
 parser.add_argument("--batch_size", help="batch size", default=32, type=int)
 parser.add_argument("--train_test_split", help="train/test split", default=0.8, type=float)
+parser.add_argument("--early_stopping_patience", help="early stopping", default=10, type=int)
 
 args = parser.parse_args()
 input_data = args.input_data
@@ -61,6 +62,7 @@ n_epochs_to_train = args.n_epochs_to_train
 n_epochs_to_test = args.n_epochs_to_test
 batch_size = args.batch_size
 train_test_split = args.train_test_split
+early_stopping_patience = args.early_stopping_patience
 
 if __name__=='__main__':
     if not os.path.exists(input_data):
@@ -85,18 +87,18 @@ if __name__=='__main__':
 
     # Create the dataset
     print("Creating the dataset...")
-    dataset = myds.TPGraphDataset(root=dataset_folder, filename=input_data, n_tps_to_read=n_tps_to_read, balance_training_set=balance_training_set, test = False)
+    dataset = myds.groupsDataset(root=dataset_folder, filename=input_data, n_tps_to_read=n_tps_to_read, balance_training_set=balance_training_set, test = False)
     dataset.shuffle()
     print("Dataset created.")
     
     # split the dataset
     print("Splitting the dataset...")
-    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [train_test_split, len(dataset) - train_test_split])
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [int(len(dataset)*train_test_split), len(dataset) - int(len(dataset)*train_test_split)])
     print(f"Number of training graphs: {len(train_dataset)}")
     print(f"Number of test graphs: {len(test_dataset)}")
 
-    print(get_unique_from_loader(train_dataset, return_counts=True))
-    print(get_unique_from_loader(test_dataset, return_counts=True))
+    print(myds.get_unique_from_loader(train_dataset, return_counts=True))
+    print(myds.get_unique_from_loader(test_dataset, return_counts=True))
     print("Dataset splitted.")
     # Create the model
     model_params = {
@@ -111,7 +113,12 @@ if __name__=='__main__':
     }
     print("Creating the model")
     gnn_model = mymodel.GNN(feature_size=6, model_params=model_params)
-    # loss as categorical cross entropy
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+    model = gnn_model.to(device)
+    print(f"Number of parameters: {mytrain.count_parameters(model)}")
+
     loss_fn = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
@@ -138,7 +145,7 @@ if __name__=='__main__':
     best_epochs_list = []
 
     for epoch in range(n_epochs_to_train): 
-        if early_stopping_counter <= 10: # = x * 5 
+        if early_stopping_counter <= early_stopping_patience:
             # Training
             model.train()
             loss, accuracy = mytrain.train_one_epoch(epoch, model, train_loader, optimizer, loss_fn, output_folder)
@@ -207,6 +214,7 @@ if __name__=='__main__':
     all_labels = np.concatenate(all_labels)
 
 
+    mytrain.test(999, model, test_loader, loss_fn, output_folder)
 
     cm, accuracy, precision, recall, f1 = mytrain.calculate_metrics(all_labels, all_preds)
 
@@ -245,6 +253,7 @@ if __name__=='__main__':
     all_labels = np.concatenate(all_labels)
 
 
+    mytrain.test(999, model, train_loader, loss_fn, output_folder)
 
     cm, accuracy, precision, recall, f1 = mytrain.calculate_metrics(all_labels, all_preds)
 

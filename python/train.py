@@ -99,10 +99,10 @@ def log_metrics(y_true, y_pred, labels=[0,1,2,3,4,5,6,7,8,9], epoch=0, test=Fals
     cm, accuracy, precision, recall, f1 = calculate_metrics(y_true, y_pred, labels)
     # Save metrics to file
     if test:
-        with open(output_folder + f"log/test/metrics_test_{epoch}.txt", "a") as f:
+        with open(output_folder + f"log/test/metrics_test.txt", "a") as f:
             f.write(f"{epoch} {accuracy} {precision} {recall} {f1}\n")
     else:
-        with open(output_folder + f"log/train/metrics_train_{epoch}.txt", "a") as f:
+        with open(output_folder + f"log/train/metrics_train.txt", "a") as f:
             f.write(f"{epoch} {accuracy} {precision} {recall} {f1}\n")
     # Print metrics
     print("Confusion Matrix")
@@ -122,4 +122,5 @@ def log_metrics(y_true, y_pred, labels=[0,1,2,3,4,5,6,7,8,9], epoch=0, test=Fals
     else:
         plt.savefig(output_folder + f"log/train/confusion_matrix_train_{epoch}.png")
     plt.clf()
+    plt.close()
 

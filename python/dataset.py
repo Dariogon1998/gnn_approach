@@ -36,7 +36,7 @@ np.random.seed(42)
 
 class groupsDataset(Dataset):
 
-    def __init__(self, root, filename, n_tps_to_read=1000, test=False, transform=None, pre_transform=None, balance_classes=False):
+    def __init__(self, root, filename, n_tps_to_read=1000, test=False, transform=None, pre_transform=None, balance_training_set=False):
         """
         root = Where the dataset should be stored. This folder is split
         into raw_dir (downloaded dataset) and processed_dir (processed data). 
@@ -44,9 +44,15 @@ class groupsDataset(Dataset):
         self.test = test
         self.filename = filename
         self.n_tps_to_read = n_tps_to_read
-        self.balance_classes = balance_classes
+        self.balance_training_set = balance_training_set
         super(groupsDataset, self).__init__(root, transform, pre_transform)
-        
+
+        if not os.path.exists(self.processed_dir):
+            os.makedirs(self.processed_dir)
+        if not os.path.exists(self.raw_dir):
+            os.makedirs(self.raw_dir)
+            
+
     @property
     def raw_file_names(self):
         """ If this file exists in raw_dir, the download is not triggered.
@@ -64,9 +70,9 @@ class groupsDataset(Dataset):
 
         # remove the groups with different types
         groups = [group for group in groups if len(set(group[:, 7])) == 1]
-        if self.balance_classes:
+        if self.balance_training_set:
             # balance the classes
-            groups = self._balance_classes(groups)
+            groups = self._balance_training_set(groups)
         self.groups = groups
 
         if self.test:
@@ -85,9 +91,9 @@ class groupsDataset(Dataset):
 
         # remove the groups with different types
         groups = [group for group in groups if len(set(group[:, 7])) == 1]
-        if self.balance_classes:
+        if self.balance_training_set:
             # balance the classes
-            groups = self._balance_classes(groups)
+            groups = self._balance_training_set(groups)
 
         self.groups = groups
 
@@ -149,7 +155,7 @@ class groupsDataset(Dataset):
         label = torch.tensor(label, dtype=torch.uint8)
         return label
 
-    def _balance_classes(self, groups):
+    def _balance_training_set(self, groups):
         '''
         This function balances the classes in the dataset (not definitive)
         '''
