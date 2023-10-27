@@ -1,17 +1,20 @@
 INPUT_FILE=/eos/user/d/dapullia/tp_dataset/snana_hits.txt
 OUTPUT_FOLDER=/eos/user/d/dapullia/gnn_approach/snana_hits/
-MODEL_NAME=model_unbalanced
+MODEL_NAME=model_weight_balanced
 LOAD_MODEL=false
-BALANCE_TRAINING_SET=true   
+BALANCE_TRAINING_SET=false   
 N_TPS_TO_READ=5000000
 N_EPOCHS_TO_TRAIN=400
 N_EPOCHS_TO_TEST=1
 DATASET_FOLDER=/eos/user/d/dapullia/gnn_approach/snana_hits/data/
 BATCH_SIZE=32
 TRAIN_TEST_SPLIT=0.8
-EARLY_STOPPING_PATIENCE=8
-# Function to print help message
+EARLY_STOPPING_PATIENCE=4
+#-------------------------------
+DELETE_OLD_DATA=false
+#-------------------------------
 
+# Function to print help message
 print_help() {
     echo "*****************************************************************************"
     echo "Usage: run-gnn.sh -i <input_file> -o <output_folder> [-h]"
@@ -21,6 +24,24 @@ print_help() {
     echo "*****************************************************************************"
     exit 0
 }
+
+# print the python path
+echo "Python path:"
+which python
+echo "Done."
+
+# If DELETE_OLD_DATA is true then delete old data
+if [ "$DELETE_OLD_DATA" = true ] ; then
+    echo "Deleting old data..."
+    rm -rf $DATASET_FOLDER
+    #make a new folder for the dataset called dataset folder + "processed/"
+    mkdir $DATASET_FOLDER processed/
+    echo "Done."
+
+fi
+
+
+
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do

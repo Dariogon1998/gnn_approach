@@ -64,6 +64,8 @@ batch_size = args.batch_size
 train_test_split = args.train_test_split
 early_stopping_patience = args.early_stopping_patience
 
+output_folder = output_folder + model_name + "/"
+
 if __name__=='__main__':
     if not os.path.exists(input_data):
         print(input_data)
@@ -88,7 +90,7 @@ if __name__=='__main__':
     # Create the dataset
     print("Creating the dataset...")
     dataset = myds.groupsDataset(root=dataset_folder, filename=input_data, n_tps_to_read=n_tps_to_read, balance_training_set=balance_training_set, test = False)
-    dataset.shuffle()
+    # dataset.shuffle()
     print("Dataset created.")
     
     # split the dataset
@@ -97,16 +99,15 @@ if __name__=='__main__':
     print(f"Number of training graphs: {len(train_dataset)}")
     print(f"Number of test graphs: {len(test_dataset)}")
 
-    print(myds.get_unique_from_loader(train_dataset, return_counts=True))
-    print(myds.get_unique_from_loader(test_dataset, return_counts=True))
+    # print(myds.get_unique_from_loader(train_dataset, return_counts=True))
+    # print(myds.get_unique_from_loader(test_dataset, return_counts=True))
     print("Dataset splitted.")
     # Create the model
     model_params = {
-    "model_embedding_size": 16,
+    "model_embedding_size": 32,
     "model_attention_heads": 2,
-    "model_layers": 1,
+    "model_layers": 2,
     "model_dropout_rate": 0.2,
-    "model_top_k_ratio": 0.5,
     "model_top_k_every_n": 100,
     "model_dense_neurons": 128,
     "model_first_layer_neurons": 32,
@@ -119,7 +120,13 @@ if __name__=='__main__':
     model = gnn_model.to(device)
     print(f"Number of parameters: {mytrain.count_parameters(model)}")
 
-    loss_fn = torch.nn.CrossEntropyLoss()
+    # Create weights for the loss function to account for the unbalanced dataset
+    print("Creating weights for the loss function to account for the unbalanced dataset")
+    unique, counts = myds.get_unique_from_loader(train_dataset, return_counts=True)
+    class_weights = torch.FloatTensor(1/counts).to(device)
+    print("Weights created")
+
+    loss_fn = torch.nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=0.0001)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
 
@@ -127,8 +134,8 @@ if __name__=='__main__':
 
     # Prepare training  
     print("Preparing training")
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=4)
     print("Training prepared")
 
 
@@ -176,101 +183,101 @@ if __name__=='__main__':
             scheduler.step()
         else:
             print("Early stopping")
-            print(f"Best epochs: {best_epochs_list}")
+            print(f"Best epochs: {best_epochs_list}\n\n")
             break
 
-    # Plot the loss
-    plt.plot(np.arange(len(train_losses)), train_losses, label="Train loss")
-    plt.plot(np.arange(len(test_losses))*n_epochs_to_train, test_losses, label="Test loss")
-    plt.xlabel("Epoch")
-    plt.title("Loss")
-    plt.savefig(output_folder+"loss.png")
-    plt.clf()
+    # # Plot the loss
+    # plt.plot(np.arange(len(train_losses)), train_losses, label="Train loss")
+    # plt.plot(np.arange(len(test_losses))*n_epochs_to_train, test_losses, label="Test loss")
+    # plt.xlabel("Epoch")
+    # plt.title("Loss")
+    # plt.savefig(output_folder+"loss.png")
+    # plt.clf()
 
-    # Plot the accuracy
-    plt.plot(np.arange(len(train_accuracies)), train_accuracies, label="Train accuracy")
-    plt.plot(np.arange(len(test_accuracies))*n_epochs_to_train, test_accuracies, label="Test accuracy")
-    plt.xlabel("Epoch")
-    plt.title("Accuracy")
-    plt.savefig(output_folder+"accuracy.png")
-    plt.clf()
+    # # Plot the accuracy
+    # plt.plot(np.arange(len(train_accuracies)), train_accuracies, label="Train accuracy")
+    # plt.plot(np.arange(len(test_accuracies))*n_epochs_to_train, test_accuracies, label="Test accuracy")
+    # plt.xlabel("Epoch")
+    # plt.title("Accuracy")
+    # plt.savefig(output_folder+"accuracy.png")
+    # plt.clf()
 
-    # Calculate metrics on the test set
-    all_preds = []
-    all_labels = []
+    # # Calculate metrics on the test set
+    # all_preds = []
+    # all_labels = []
 
-    for batch in test_loader:
-        batch.to(device)  
-        pred = model(batch.x.float(), 
-                        batch.edge_index, 
-                        batch.batch) 
+    # for batch in test_loader:
+    #     batch.to(device)  
+    #     pred = model(batch.x.float(), 
+    #                     batch.edge_index, 
+    #                     batch.batch) 
 
-        batch.y=torch.reshape(batch.y, pred.shape)
+    #     batch.y=torch.reshape(batch.y, pred.shape)
 
-        all_preds.append((F.softmax(pred).cpu().detach().numpy() ))
-        all_labels.append((batch.y.cpu().detach().numpy()))
+    #     all_preds.append((F.softmax(pred).cpu().detach().numpy() ))
+    #     all_labels.append((batch.y.cpu().detach().numpy()))
 
-    all_preds = np.concatenate(all_preds)
-    all_labels = np.concatenate(all_labels)
-
-
-    mytrain.test(999, model, test_loader, loss_fn, output_folder)
-
-    cm, accuracy, precision, recall, f1 = mytrain.calculate_metrics(all_labels, all_preds)
-
-    print(f"Accuracy: {accuracy}")
-    print(f"Precision: {precision}")
-    print(f"Recall: {recall}")
-    print(f"F1: {f1}")
-    print(f"Confusion matrix: \n{cm}")
-    # Plot the confusion matrix
-    labels = [0,1,2,3,4,5,6,7,8,9]
-    plt.figure(figsize=(10,10))
-    plt.title("Confusion matrix")
-    sns.heatmap(cm, annot=True, cmap="YlGnBu", xticklabels=labels, yticklabels=labels)
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
-    plt.savefig(output_folder+'confusion_matrix.png')
-    plt.clf()
+    # all_preds = np.concatenate(all_preds)
+    # all_labels = np.concatenate(all_labels)
 
 
-    # Calculate metrics on the train set
-    all_preds = []
-    all_labels = []
+    # mytrain.test(999, model, test_loader, loss_fn, output_folder)
 
-    for batch in train_loader:
-        batch.to(device)  
-        pred = model(batch.x.float(), 
-                        batch.edge_index, 
-                        batch.batch) 
+    # cm, accuracy, precision, recall, f1 = mytrain.calculate_metrics(all_labels, all_preds)
 
-        batch.y=torch.reshape(batch.y, pred.shape)
+    # print(f"Accuracy: {accuracy}")
+    # print(f"Precision: {precision}")
+    # print(f"Recall: {recall}")
+    # print(f"F1: {f1}")
+    # print(f"Confusion matrix: \n{cm}")
+    # # Plot the confusion matrix
+    # labels = [0,1,2,3,4,5,6,7,8,9]
+    # plt.figure(figsize=(10,10))
+    # plt.title("Confusion matrix")
+    # sns.heatmap(cm, annot=True, cmap="YlGnBu", xticklabels=labels, yticklabels=labels)
+    # plt.ylabel('True label')
+    # plt.xlabel('Predicted label')
+    # plt.savefig(output_folder+'confusion_matrix.png')
+    # plt.clf()
 
-        all_preds.append((F.softmax(pred).cpu().detach().numpy() ))
-        all_labels.append((batch.y.cpu().detach().numpy()))
 
-    all_preds = np.concatenate(all_preds)
-    all_labels = np.concatenate(all_labels)
+    # # Calculate metrics on the train set
+    # all_preds = []
+    # all_labels = []
+
+    # for batch in train_loader:
+    #     batch.to(device)  
+    #     pred = model(batch.x.float(), 
+    #                     batch.edge_index, 
+    #                     batch.batch) 
+
+    #     batch.y=torch.reshape(batch.y, pred.shape)
+
+    #     all_preds.append((F.softmax(pred).cpu().detach().numpy() ))
+    #     all_labels.append((batch.y.cpu().detach().numpy()))
+
+    # all_preds = np.concatenate(all_preds)
+    # all_labels = np.concatenate(all_labels)
 
 
-    mytrain.test(999, model, train_loader, loss_fn, output_folder)
+    # mytrain.test(999, model, train_loader, loss_fn, output_folder)
 
-    cm, accuracy, precision, recall, f1 = mytrain.calculate_metrics(all_labels, all_preds)
+    # cm, accuracy, precision, recall, f1 = mytrain.calculate_metrics(all_labels, all_preds)
 
-    print(f"Accuracy: {accuracy}")
-    print(f"Precision: {precision}")
-    print(f"Recall: {recall}")
-    print(f"F1: {f1}")
-    print(f"Confusion matrix: \n{cm}")
-    # Plot the confusion matrix
-    labels = [0,1,2,3,4,5,6,7,8,9]
-    plt.figure(figsize=(10,10))
-    plt.title("Confusion matrix")
-    sns.heatmap(cm, annot=True, cmap="YlGnBu", xticklabels=labels, yticklabels=labels)
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
-    plt.savefig(output_folder+'confusion_matrix_train.png')
-    plt.clf()
+    # print(f"Accuracy: {accuracy}")
+    # print(f"Precision: {precision}")
+    # print(f"Recall: {recall}")
+    # print(f"F1: {f1}")
+    # print(f"Confusion matrix: \n{cm}")
+    # # Plot the confusion matrix
+    # labels = [0,1,2,3,4,5,6,7,8,9]
+    # plt.figure(figsize=(10,10))
+    # plt.title("Confusion matrix")
+    # sns.heatmap(cm, annot=True, cmap="YlGnBu", xticklabels=labels, yticklabels=labels)
+    # plt.ylabel('True label')
+    # plt.xlabel('Predicted label')
+    # plt.savefig(output_folder+'confusion_matrix_train.png')
+    # plt.clf()
 
 
 

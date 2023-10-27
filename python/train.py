@@ -3,6 +3,8 @@ import torch
 from torch_geometric.data import DataLoader
 import torch.nn.functional as F
 from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
+from sklearn.metrics import roc_curve, auc
+from sklearn.preprocessing import label_binarize
 import numpy as np
 from tqdm import tqdm
 from dataset import groupsDataset
@@ -122,5 +124,26 @@ def log_metrics(y_true, y_pred, labels=[0,1,2,3,4,5,6,7,8,9], epoch=0, test=Fals
     else:
         plt.savefig(output_folder + f"log/train/confusion_matrix_train_{epoch}.png")
     plt.clf()
+    # Compute ROC curve and ROC area for each class
+    # Binarize the output
+    y_test = label_binarize(y_true, classes=np.arange(len(labels)))
+    n_classes = y_test.shape[1]
+    
+    fpr = dict()
+    tpr = dict()
+    for i in range(n_classes):
+        fpr[i], tpr[i], _ = roc_curve(y_true[:, i], y_pred[:, i])
+        roc_auc = auc(fpr[i], tpr[i])
+        plt.plot(fpr[i], tpr[i], lw=2, label='ROC curve of class {0} (area = {1:0.2f})'.format(i, roc_auc))
+
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('ROC curve')
+    plt.legend(loc="lower right")
+    if test:
+        plt.savefig(output_folder+f"log/test/roc_curve_test_{epoch}.png")
+    else:
+        plt.savefig(output_folder+f"log/train/roc_curve_train_{epoch}.png")
     plt.close()
 

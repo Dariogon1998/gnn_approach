@@ -87,7 +87,7 @@ class groupsDataset(Dataset):
         data = np.loadtxt(self.raw_paths[0], max_rows=self.n_tps_to_read, dtype=int)
         channel_map = tp2img.create_channel_map_array('/afs/cern.ch/work/d/dapullia/public/dune/online-pointing-utils/channel-maps/channel_map_upright.txt')
         # groups = tp2img.group_maker_only_by_time(data, channel_map, ticks_limit=200, channel_limit=20, min_tps_to_group=3)
-        groups = tp2img.group_maker(data, channel_map, ticks_limit=200, channel_limit=20, min_tps_to_group=2)
+        groups = tp2img.group_maker(data, channel_map, ticks_limit=150, channel_limit=20, min_tps_to_group=2)
 
         # remove the groups with different types
         groups = [group for group in groups if len(set(group[:, 7])) == 1]

@@ -61,10 +61,9 @@ class GNN(torch.nn.Module):
             x = F.relu(x)
             x = F.dropout(x, p=0.2, training=self.training)
 
-        # Replace Top-K Pooling with Global Mean Pooling
-        x = global_mean_pool(x, batch_index)
-
-        x = torch.cat([x, x], dim=1)  # Concatenating with itself for simplicity
+        x1 = global_mean_pool(x, batch_index)
+        x2 = global_max_pool(x, batch_index)
+        x = torch.cat([x1, x2], dim=1)
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
         x = self.linear3(x)
